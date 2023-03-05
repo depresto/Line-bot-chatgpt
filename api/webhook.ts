@@ -60,11 +60,16 @@ export default async function (req: VercelRequest, res: VercelResponse) {
           case "text":
             let replyText = "";
             try {
-              const completion = await openAI.createCompletion({
+              const completion = await openAI.createChatCompletion({
                 model: "gpt-3.5-turbo",
-                prompt: event.message.text,
+                messages: [
+                  {
+                    role: "user",
+                    content: event.message.text,
+                  },
+                ],
               });
-              replyText = completion.data.choices[0].text ?? "";
+              replyText = completion.data.choices[0].message?.content ?? "";
             } catch (error) {
               if (error.response) {
                 console.log(error.response.status);
