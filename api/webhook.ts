@@ -7,17 +7,43 @@ import {
   Client,
 } from "@line/bot-sdk";
 import { Configuration, OpenAIApi } from "openai";
+import mongoose from "mongoose";
+import ChatRecord from "../model/ChatRecord";
+import { ChatCompletionRequestMessage } from "openai";
+
+const fetchLatestChatRecord = async (userId: string) => {
+  await mongoose.connect(process.env.MONGODB_URI ?? "");
+  const db = mongoose.connection;
+  const lastChat = await ChatRecord.find({ userId }, null, {
+    sort: { createdAt: -1 },
+    limit: 1,
+  });
+  db.close();
+  return lastChat[0];
+};
+
+const saveChatRecord = async (userId: string, messages: any[]) => {
+  await mongoose.connect(process.env.MONGODB_URI ?? "");
+  const db = mongoose.connection;
+  const chatRecord = new ChatRecord({
+    userId,
+    messages,
+  });
+  await chatRecord.save();
+  db.close();
+};
 
 export default async function (req: VercelRequest, res: VercelResponse) {
   if (
     !process.env.LINE_CHANNEL_ACCESS_TOKEN ||
     !process.env.LINE_CHANNEL_SECRET ||
-    !process.env.OPENAI_API_KEY
+    !process.env.OPENAI_API_KEY ||
+    !process.env.MONGODB_URI
   ) {
     res
       .status(500)
       .send(
-        "LINE_CHANNEL_ACCESS_TOKEN or LINE_CHANNEL_SECRET or OPENAI_API_KEY is not set"
+        "LINE_CHANNEL_ACCESS_TOKEN or LINE_CHANNEL_SECRET, OPENAI_API_KEY or MONGODB_URI is not set"
       );
     return;
   }
@@ -58,6 +84,20 @@ export default async function (req: VercelRequest, res: VercelResponse) {
       case "message":
         switch (event.message.type) {
           case "text":
+            let contextMessages: ChatCompletionRequestMessage[] = [];
+
+            if (event.source.userId) {
+              const lastChat = await fetchLatestChatRecord(event.source.userId);
+              if (lastChat) {
+                contextMessages = lastChat.messages.map((message) => {
+                  return {
+                    role: message.role,
+                    content: message.content,
+                  };
+                });
+              }
+            }
+
             let replyText = "";
             try {
               const completion = await openAI.createChatCompletion({
@@ -68,6 +108,7 @@ export default async function (req: VercelRequest, res: VercelResponse) {
                     role: "system",
                     content: "以下內容如果是中文的話，請用繁體中文來回答",
                   },
+                  ...contextMessages,
                   {
                     role: "user",
                     content: event.message.text,
@@ -88,6 +129,20 @@ export default async function (req: VercelRequest, res: VercelResponse) {
               type: "text",
               text: replyText,
             });
+
+            if (event.source.userId) {
+              await saveChatRecord(event.source.userId, [
+                {
+                  role: "user",
+                  content: event.message.text,
+                },
+                {
+                  role: "assistant",
+                  content: replyText,
+                },
+              ]);
+            }
+
             break;
           default:
             console.log(`Unsupported message type: ${event.message.type}`);
