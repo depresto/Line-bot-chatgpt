@@ -61,6 +61,7 @@ export default async function (req: VercelRequest, res: VercelResponse) {
             let replyText = "";
             try {
               const completion = await openAI.createChatCompletion({
+                user: event.source.userId,
                 model: "gpt-3.5-turbo",
                 messages: [
                   {
