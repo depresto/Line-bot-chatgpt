@@ -64,6 +64,10 @@ export default async function (req: VercelRequest, res: VercelResponse) {
                 model: "gpt-3.5-turbo",
                 messages: [
                   {
+                    role: "system",
+                    content: "以下內容如果是中文的話，請用繁體中文來回答",
+                  },
+                  {
                     role: "user",
                     content: event.message.text,
                   },
