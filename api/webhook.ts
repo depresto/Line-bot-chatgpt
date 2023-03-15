@@ -88,7 +88,7 @@ export default async function (req: VercelRequest, res: VercelResponse) {
 
             if (event.source.userId) {
               const lastChat = await fetchLatestChatRecord(event.source.userId);
-              if (lastChat) {
+              if (lastChat && lastChat.messages.length > 1) {
                 contextMessages = lastChat.messages.map((message) => {
                   return {
                     role: message.role,
